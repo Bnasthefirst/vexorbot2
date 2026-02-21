@@ -344,6 +344,8 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     # Render provides the external hostname automatically
+    await application.initialize()
+    await application.start()
     domain = os.getenv("RENDER_EXTERNAL_HOSTNAME")
     if domain:
         webhook_url = f"https://{domain}/webhook"
