@@ -1,0 +1,8 @@
+python-telegram-bot
+python-dotenv
+requests
+fastapi# since we switched to webhooks later
+uvicorn
+
+# httpx
+
